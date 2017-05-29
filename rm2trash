@@ -1,0 +1,93 @@
+#!/bin/bash
+
+:<<!
+Usage: rm2trash [option]... [file]...
+
+Securely delete: move file(s) to ~/.trash.
+
+Use argv '-!' to call system command 'rm'.
+!
+
+
+while getopts "!h" opts; do
+    case $opts in
+        !)
+            cmd=rm
+            for arg in "$@"; do
+                if [ $arg != -! ]; then
+                    cmd=${cmd}\ $arg
+                fi
+            done
+            $cmd
+            exit
+            ;;
+        h)
+            echo Securely delete: move file\(s\) to ~/.trash.
+            echo Use argv \'-!\' to call \'rm\'.
+            ;;
+        ?)
+            echo Try \'-h\' for more information.
+    exit 1
+    ;;
+    esac
+done
+
+
+if [ ! -d ~/.trash ]; then
+	mkdir ~/.trash
+fi
+
+maxsize=60000000
+for file in "$@"; do
+    if [ ${file:0:1} = - ]; then
+        continue
+    fi
+    
+    if [ ! -e "$file" ]; then
+        echo rm: cannot remove \'$file\': No such file or directory
+    else
+        if [ -f "$file" ]; then
+            filesize=$(wc -c <"$file")
+            filetype=file
+        elif [ -d "$file" ]; then
+            filesize=$(du -bs "$file" | cut -f1)
+            filetype=directory
+        else
+            echo Unexpected Error: cannot identify file type: $file
+            echo "Try 'mv' or '-!' to delete it permanently."
+            exit
+        fi
+        if [ $filesize -ge $maxsize ]; then
+            echo "Warning: large $filetype: $file (`echo $filesize / 1000000 | bc`M)"
+            REPLY=WAITFORREPLY
+            while [ "$REPLY"x != "y"x ] && [ "$REPLY"x != "n"x ] && [ "$REPLY" ]; do
+                read -p "Delete it to trash? [y/n] "
+            done
+            if [ "$REPLY" = "n" ]; then
+                /bin/rm -r "$file"
+                continue
+            fi
+        fi
+
+        if [ ! -e ~/.trash/"$file" ]; then
+            mv "$file" ~/.trash
+        else
+            i=1
+            tmp="$file"
+            while [ -e ~/.trash/"$tmp" ]; do
+                tmp="${file}($i)"
+                ((i=$i+1))
+            done
+            mv "$file" ~/.trash/"$tmp"
+        fi
+    fi
+done
+
+
+# if [[ $file =~ \(([0-9]+)\)$ ]]; then
+#     tmp=${file//BASH_REMATCH[1]/`echo ${BASH_REMATCH[1]} + 1 | bc`}
+#     mv $file $tmp
+# else
+#     tmp=${file}\(1\)
+#     mv $file $tmp
+# fi
